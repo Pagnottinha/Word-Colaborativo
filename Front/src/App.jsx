@@ -16,7 +16,7 @@ function AppContent() {
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   const { isAuthenticated, user } = useSelector((state) => state.auth);
-  const currentDocument = useSelector((state) => state.document.currentDocument);
+  const currentDocument = useSelector((state) => stFate.document.currentDocument);
 
   // React to current document changes
   useEffect(() => {

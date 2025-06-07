@@ -45,10 +45,16 @@ class SocketService {
       this.isAuthenticating = false;
       authService.logout();
       store.dispatch({ type: 'auth/logout' });
+    });    this.socket.on('document-data', (document) => {
+      store.dispatch({ type: 'document/setCurrentDocument', payload: document });
     });
 
-    this.socket.on('document-data', (document) => {
-      store.dispatch({ type: 'document/setCurrentDocument', payload: document });
+    this.socket.on('document-content', (data) => {
+      console.log('📄 Received document content:', data);
+      store.dispatch({ type: 'document/updateContent', payload: data.content });
+      if (data.title) {
+        store.dispatch({ type: 'document/updateTitle', payload: data.title });
+      }
     });
 
     this.socket.on('text-change', (data) => {
@@ -183,8 +189,7 @@ class SocketService {
     
     this.socket.on('document-shares', (data) => {
       console.log('Document shares received:', data);
-    });
-      this.socket.on('document-error', (data) => {
+    });      this.socket.on('document-error', (data) => {
       console.error('Document error:', data.error);
       
       // Notificar o usuário sobre erro de documento
@@ -200,6 +205,35 @@ class SocketService {
       
       // Também atualizar o estado de erro do documento
       this.store.dispatch({ type: 'document/setError', payload: data.error });
+    });
+
+    this.socket.on('document-access-revoked', (data) => {
+      console.warn('Document access revoked:', data);
+      
+      // Notificar o usuário que perdeu acesso
+      if (this.store) {
+        this.store.dispatch({ 
+          type: 'notifications/add', 
+          payload: { 
+            type: 'warning', 
+            message: data.message || 'Você perdeu acesso a este documento'
+          }
+        });
+          // Limpar o documento atual se for o mesmo que perdeu acesso
+        const currentDoc = this.store.getState().document.currentDocument;
+        if (currentDoc && currentDoc.id === data.documentId) {
+          this.store.dispatch({ type: 'document/clearDocument' });
+          this.store.dispatch({ type: 'collaboration/clearCollaboration' });
+          
+          // Redirecionar para a lista de documentos
+          if (typeof window !== 'undefined' && window.location) {
+            window.location.href = '/documents';
+          }
+        }
+      }
+      
+      // Recarregar a lista de documentos
+      this.getDocuments();
     });
 
     this.socket.on('documents-error', (data) => {
@@ -263,10 +297,19 @@ class SocketService {
     } else {
       console.log('Cannot authenticate - socket:', !!this.socket, 'isAuthenticating:', this.isAuthenticating);
     }
-  }
-  
-  // Verificar se está autenticado antes de fazer operações
+  }  // Verificar se está autenticado antes de fazer operações
   ensureAuthenticated() {
+    // Se já está autenticado, retornar true
+    if (this.isAuthenticated) {
+      return true;
+    }
+    
+    // Se tem socket conectado e token, assumir que está autenticado
+    // (isso resolve o problema de timing entre conexão e autenticação)
+    if (this.socket && this.socket.connected && authService.getToken()) {
+      return true;
+    }
+    
     if (!this.isAuthenticated && !this.isAuthenticating) {
       const token = authService.getToken();
       if (token) {
@@ -277,7 +320,7 @@ class SocketService {
       }
     }
     return this.isAuthenticated;
-  }  
+  }
   
   /**
    * Entra em uma sala de documento para edição colaborativa
@@ -310,14 +353,13 @@ class SocketService {
     this.socket.emit('join-document', documentId);
     this.store.dispatch({ type: 'collaboration/setCurrentRoom', payload: documentId });
   }
-  
-  /**
+    /**
    * Sai de uma sala de documento
    * @param {string} documentId ID do documento
    */
   leaveDocument(documentId) {
     if (this.socket) {
-      this.socket.emit('leave-document', documentId);
+      this.socket.emit('leave-document', { documentId });
       this.store.dispatch({ type: 'collaboration/clearCollaboration' });
     }
   }
@@ -328,13 +370,8 @@ class SocketService {
    * @param {string} content Conteúdo atualizado
    * @param {object} operation Informações sobre a operação
    */  sendTextChange(documentId, content, operation) {
-    console.log('📝 Frontend: Sending text change for document:', documentId, 'content length:', content.length);
-    
     if (this.socket && this.ensureAuthenticated()) {
       this.socket.emit('text-change', { documentId, content, operation });
-      console.log('✅ Text change sent successfully');
-    } else {
-      console.error('❌ Cannot send text change - socket or auth issue');
     }
   }
 
@@ -353,15 +390,11 @@ class SocketService {
    * @param {string} documentId ID do documento
    * @param {number} position Posição do cursor
    * @param {object} selection Informações sobre seleção (início e fim)
-   */
-  sendCursorPosition(documentId, position, selection) {
-    if (!this.socket || !this.isAuthenticated) {
-      console.log('Cannot send cursor position - socket:', !!this.socket, 'authenticated:', this.isAuthenticated);
+   */  sendCursorPosition(documentId, position, selection) {
+    if (!this.socket || !this.ensureAuthenticated()) {
       return;
     }
 
-    console.log('Sending cursor position immediately:', { documentId, position, selection });
-    
     // Enviar imediatamente sem fila para melhor responsividade
     this.socket.emit('cursor-position', { documentId, position, selection });
     

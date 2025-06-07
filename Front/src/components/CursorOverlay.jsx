@@ -48,12 +48,12 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
       // Obter as dimensões e posição do textarea
       const textareaRect = textarea.getBoundingClientRect();
       const style = window.getComputedStyle(textarea);
-      
+
       // Métricas de texto
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
       context.font = `${style.fontSize} ${style.fontFamily}`;
-      
+
       const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
       const paddingLeft = parseFloat(style.paddingLeft) || 0;
       const paddingTop = parseFloat(style.paddingTop) || 0;
@@ -63,15 +63,15 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
         const lines = text.substring(0, pos).split('\n');
         const currentLine = lines.length - 1;
         const currentLineText = lines[lines.length - 1];
-        
+
         let textWidth = 0;
         if (pos > 0 && currentLineText.length > 0) {
           textWidth = context.measureText(currentLineText).width;
         }
-        
+
         const x = paddingLeft + textWidth - textarea.scrollLeft;
         const y = paddingTop + (currentLine * lineHeight) - textarea.scrollTop;
-        
+
         return { x: Math.round(x), y: Math.round(y), line: currentLine };
       };
 
@@ -85,8 +85,8 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
 
       // Verificar se está dentro dos limites visíveis
       if (startCoords.x < 0 || startCoords.y < 0 || endCoords.x < 0 || endCoords.y < 0 ||
-          startCoords.x > textarea.clientWidth || endCoords.x > textarea.clientWidth ||
-          startCoords.y > textarea.clientHeight || endCoords.y > textarea.clientHeight) {
+        startCoords.x > textarea.clientWidth || endCoords.x > textarea.clientWidth ||
+        startCoords.y > textarea.clientHeight || endCoords.y > textarea.clientHeight) {
         return null;
       }
 
@@ -134,39 +134,39 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
       // Criar um elemento temporário para medir a posição
       const range = document.createRange();
       const selection = window.getSelection();
-      
+
       // Para textarea, precisamos usar uma abordagem diferente
       // Vamos usar as coordenadas do cliente relativas ao textarea
-      
+
       // Obter as dimensões e posição do textarea
       const textareaRect = textarea.getBoundingClientRect();
       const style = window.getComputedStyle(textarea);
-      
+
       // Calcular a posição baseada na linha e coluna
       const lines = text.substring(0, position).split('\n');
       const currentLine = lines.length - 1;
       const currentColumn = lines[lines.length - 1].length;
-        // Obter métricas de texto - usar o texto real da linha para maior precisão
+      // Obter métricas de texto - usar o texto real da linha para maior precisão
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
       context.font = `${style.fontSize} ${style.fontFamily}`;
-        // Medir a largura exata do texto até a posição do cursor na linha atual
+      // Medir a largura exata do texto até a posição do cursor na linha atual
       const currentLineText = lines[lines.length - 1];
       let textWidth = 0;
-      
+
       // Para posição 0, a largura é sempre 0
       if (position === 0) {
         textWidth = 0;
       } else if (currentLineText.length > 0) {
         textWidth = context.measureText(currentLineText).width;
       }
-      
+
       const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
-      
+
       // Padding do textarea
       const paddingLeft = parseFloat(style.paddingLeft) || 0;
       const paddingTop = parseFloat(style.paddingTop) || 0;
-        // Posição calculada usando a largura exata do texto
+      // Posição calculada usando a largura exata do texto
       const x = paddingLeft + textWidth - textarea.scrollLeft;
       const y = paddingTop + (currentLine * lineHeight) - textarea.scrollTop;
 
@@ -178,10 +178,10 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
       // Verificar se a posição está dentro dos limites visíveis
       if (x < 0 || y < 0 || x > textarea.clientWidth || y > textarea.clientHeight) {
         return null;
-      }      console.log(`Cursor position for ${position}:`, { 
-        line: currentLine, 
-        column: currentColumn, 
-        x: Math.round(x), 
+      } console.log(`Cursor position for ${position}:`, {
+        line: currentLine,
+        column: currentColumn,
+        x: Math.round(x),
         y: Math.round(y),
         textWidth,
         paddingLeft,
@@ -208,10 +208,10 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
     return Object.entries(cursors)
       .filter(([userId, cursorData]) => {
         // Filtrar apenas cursores válidos de outros usuários
-        return userId !== 'currentUser' && 
-               cursorData && 
-               typeof cursorData.position === 'number' &&
-               cursorData.username;
+        return userId !== 'currentUser' &&
+          cursorData &&
+          typeof cursorData.position === 'number' &&
+          cursorData.username;
       })
       .map(([userId, cursorData]) => {
         const color = getUserColor(userId);
@@ -223,19 +223,19 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
         // Renderizar seleção se existir
         if (cursorData.selection && cursorData.selection.start !== cursorData.selection.end) {
           const selectionRange = getSelectionRange(cursorData.selection);
-          
+
           if (selectionRange) {
             console.log(`✅ Rendering selection for ${userId}:`, selectionRange);
-            
+
             if (selectionRange.isMultiline) {
               // Seleção multi-linha - renderizar múltiplos retângulos
               const startY = selectionRange.start.y;
               const endY = selectionRange.end.y;
               const lineHeight = parseFloat(window.getComputedStyle(textareaRef.current).lineHeight) || 18;
-              
+
               // Primeira linha (do início até o final da linha)
               elements.push(
-                <div 
+                <div
                   key={`${userId}-selection-start`}
                   className="collaborative-selection"
                   style={{
@@ -251,12 +251,12 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
                   }}
                 />
               );
-              
+
               // Linhas intermediárias (se houver)
               const numMiddleLines = Math.max(0, (endY - startY) / lineHeight - 1);
               for (let i = 0; i < numMiddleLines; i++) {
                 elements.push(
-                  <div 
+                  <div
                     key={`${userId}-selection-middle-${i}`}
                     className="collaborative-selection"
                     style={{
@@ -273,10 +273,10 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
                   />
                 );
               }
-              
+
               // Última linha (do início da linha até o final)
               elements.push(
-                <div 
+                <div
                   key={`${userId}-selection-end`}
                   className="collaborative-selection"
                   style={{
@@ -295,7 +295,7 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
             } else {
               // Seleção de linha única
               elements.push(
-                <div 
+                <div
                   key={`${userId}-selection`}
                   className="collaborative-selection"
                   style={{
@@ -317,12 +317,12 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
 
         // Renderizar cursor apenas se não há seleção (cursor fica no final da seleção)
         const cursorPosition = getCursorPosition(cursorData.position);
-        
+
         if (cursorPosition) {
           console.log(`✅ Rendering cursor for ${userId} at`, cursorPosition);
 
           elements.push(
-            <div 
+            <div
               key={`${userId}-cursor`}
               className="collaborative-cursor-wrapper"
               style={{
@@ -345,7 +345,7 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
                   boxShadow: `0 0 2px ${color}`,
                 }}
               />
-              
+
               {/* Label do usuário - mostrar apenas se não há seleção ou sempre mostrar */}
               <div
                 style={{
@@ -364,7 +364,7 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
                 }}
               >
                 {cursorData.username}
-                {cursorData.selection && cursorData.selection.start !== cursorData.selection.end && 
+                {cursorData.selection && cursorData.selection.start !== cursorData.selection.end &&
                   ` (${cursorData.selection.end - cursorData.selection.start} chars)`
                 }
               </div>
@@ -378,9 +378,9 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
       })
       .flat()
       .filter(Boolean);
-  }, [cursors]);  return (
-    <div 
-      className="cursor-overlay" 
+  }, [cursors]); return (
+    <div
+      className="cursor-overlay"
       style={{
         position: 'absolute',
         top: 0,

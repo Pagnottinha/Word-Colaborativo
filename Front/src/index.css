@@ -4,7 +4,7 @@
     'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif;
   line-height: 1.6;
   font-weight: 400;
-  
+
   color-scheme: light;
   color: #1a202c;
   background-color: #f8fafc;
@@ -21,7 +21,8 @@
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   width: 100%;
   overflow-x: hidden;

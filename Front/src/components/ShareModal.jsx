@@ -13,7 +13,7 @@ const ShareModal = ({ document, isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen && document) {
       loadShares();
-        // Escutar eventos de compartilhamento
+      // Escutar eventos de compartilhamento
       const handleDocumentShared = (data) => {
         setSuccess(data.message);
         setShareEmail('');
@@ -59,10 +59,12 @@ const ShareModal = ({ document, isOpen, onClose }) => {
       setLoading(true);
       socketService.socket.emit('get-document-shares', { documentId: document.id });
     }
-  };  const handleShare = (e) => {
+  };
+
+  const handleShare = (e) => {
     e.preventDefault();
     const email = shareEmail.trim();
-    
+
     if (!email) {
       setError('Digite um email');
       return;
@@ -77,32 +79,34 @@ const ShareModal = ({ document, isOpen, onClose }) => {
 
     setLoading(true);
     setError('');
-    
+
     try {
       // Verificar se não estamos compartilhando com um usuário que já tem acesso
-      const alreadyShared = shares.some(share => 
+      const alreadyShared = shares.some(share =>
         share.email && share.email.toLowerCase() === email.toLowerCase()
       );
-      
+
       if (alreadyShared) {
         setError(`O usuário "${email}" já tem acesso a este documento`);
         setLoading(false);
         return;
       }
-        socketService.shareDocument(
+      socketService.shareDocument(
         document.id,
         email,
         permissionType
       );
-      
+
       // Não mostrar mensagem de sucesso aqui - aguardar resposta do servidor
     } catch (err) {
       setError('Erro ao compartilhar: ' + (err.message || 'Falha na conexão'));
       setLoading(false);
     }
-  };  const handleUnshare = (email) => {
+  };
+
+  const handleUnshare = (email) => {
     setLoading(true);
-    
+
     try {
       // Não mostrar mensagem de sucesso aqui - aguardar resposta do servidor
       socketService.unshareDocument(document.id, email);
@@ -143,7 +147,9 @@ const ShareModal = ({ document, isOpen, onClose }) => {
             <div className="success-message">
               {success}
             </div>
-          )}          <form onSubmit={handleShare} className="share-form">
+          )}
+
+          <form onSubmit={handleShare} className="share-form">
             <div className="form-group">
               <label>Compartilhar com usuário:</label>
               <div className="share-input-group">
@@ -162,8 +168,8 @@ const ShareModal = ({ document, isOpen, onClose }) => {
                   <option value="read">Apenas leitura</option>
                   <option value="write">Pode editar</option>
                 </select>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="btn-primary share-btn"
                   disabled={loading}
                 >
@@ -187,7 +193,8 @@ const ShareModal = ({ document, isOpen, onClose }) => {
                 <p>Nenhum usuário foi adicionado ainda.</p>
               </div>
             ) : (
-              <div className="shares-items">                {shares.map((share, index) => (
+              <div className="shares-items">
+                {shares.map((share, index) => (
                   <div key={index} className="share-item">
                     <div className="share-user">
                       <div className="user-avatar">
@@ -201,7 +208,7 @@ const ShareModal = ({ document, isOpen, onClose }) => {
                         </span>
                       </div>
                     </div>
-                    
+
                     <div className="share-permission">
                       <div className="permission-badge">
                         {share.permission_type === 'write' ? (
@@ -216,7 +223,7 @@ const ShareModal = ({ document, isOpen, onClose }) => {
                           </>
                         )}
                       </div>
-                      
+
                       <button
                         onClick={() => handleUnshare(share.email || share.username)}
                         className="btn-danger-small"
@@ -224,7 +231,8 @@ const ShareModal = ({ document, isOpen, onClose }) => {
                       >
                         <FiTrash2 size={14} />
                       </button>
-                    </div>                  </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

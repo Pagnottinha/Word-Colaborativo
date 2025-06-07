@@ -11,7 +11,8 @@ const initialState = {
 const documentSlice = createSlice({
   name: 'document',
   initialState,
-  reducers: {    setCurrentDocument: (state, action) => {
+  reducers: {    
+    setCurrentDocument: (state, action) => {
       state.currentDocument = action.payload;
       state.content = action.payload?.content || '';
       state.title = action.payload?.title || '';

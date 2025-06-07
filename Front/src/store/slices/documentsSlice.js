@@ -10,7 +10,9 @@ const initialState = {
 
 const documentsSlice = createSlice({
   name: 'documents',
-  initialState,  reducers: {    setDocuments: (state, action) => {
+  initialState,  
+  reducers: {    
+    setDocuments: (state, action) => {
       const { ownDocuments = [], sharedDocuments = [], publicDocuments = [] } = action.payload;
       state.ownDocuments = ownDocuments;
       state.sharedDocuments = sharedDocuments;

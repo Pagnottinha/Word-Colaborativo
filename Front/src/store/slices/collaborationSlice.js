@@ -63,7 +63,8 @@ const collaborationSlice = createSlice({
       }
       
       console.log('After removing user, connected users:', JSON.stringify(state.connectedUsers));
-    },    updateCursor: (state, action) => {
+    },    
+    updateCursor: (state, action) => {
       const { userId, username, position, selection, timestamp } = action.payload;
       
       console.log('Updating cursor in Redux:', action.payload);

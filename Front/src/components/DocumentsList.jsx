@@ -81,7 +81,8 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
   }
 
   return (
-    <div className="documents-list">      <div className="documents-header">
+    <div className="documents-list">      
+      <div className="documents-header">
         <h2>
           <FiFileText size={24} />
           Meus Documentos
@@ -99,7 +100,8 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
         <div className="error-message">
           {error}
         </div>
-      )}      {showNewDocForm && (
+      )}      
+      {showNewDocForm && (
         <div className="new-document-form">
           <form onSubmit={handleCreateDocument}>
             <input
@@ -123,7 +125,8 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
             <div className="form-actions">
               <button type="submit" className="btn-primary">
                 Criar
-              </button>              <button 
+              </button>              
+              <button 
                 type="button" 
                 className="btn-secondary"
                 onClick={() => {
@@ -137,14 +140,16 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
             </div>
           </form>
         </div>
-      )}      <div className="documents-grid">
+      )}      
+      <div className="documents-grid">
         {/* Seção de Documentos Próprios */}
         {ownDocuments.length > 0 && (
           <div className="documents-section">
             <div className="section-header">
               <h3><FiEdit3 size={20} /> Meus Documentos</h3>
             </div>
-            <div className="documents-cards">              {ownDocuments.map((doc) => (
+            <div className="documents-cards">              
+            {ownDocuments.map((doc) => (
                 <div 
                   key={doc.id} 
                   className="document-card own-document"
@@ -214,7 +219,8 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
                 </div>
               ))}
             </div>
-          </div>        )}
+          </div>        
+        )}
 
         {/* Seção de Documentos Compartilhados */}
         {sharedDocuments.length > 0 && (
@@ -280,7 +286,8 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
               ))}
             </div>
           </div>
-        )}        {/* Estado vazio */}
+        )}        
+        {/* Estado vazio */}
         {ownDocuments.length === 0 && sharedDocuments.length === 0 && publicDocuments.length === 0 && (
           <div className="empty-state">
             <FiFileText size={48} />

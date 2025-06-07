@@ -7,7 +7,9 @@ const SettingsModal = ({ document, isOpen, onClose, onDocumentUpdated, onDocumen
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
-    if (!isOpen || !document) return null;    const handleVisibilityChange = async (newIsPublic) => {
+    if (!isOpen || !document) return null;
+
+    const handleVisibilityChange = async (newIsPublic) => {
         setIsLoading(true);
         try {
             // Usar WebSocket em vez de HTTP
@@ -22,7 +24,7 @@ const SettingsModal = ({ document, isOpen, onClose, onDocumentUpdated, onDocumen
                     setIsPublic(newIsPublic);
                     onDocumentUpdated({ ...document, is_public: newIsPublic });
                     setIsLoading(false);
-                    
+
                     // Remover listener após uso
                     socketService.off('document-visibility-updated', handleVisibilityUpdated);
                 }
@@ -31,7 +33,7 @@ const SettingsModal = ({ document, isOpen, onClose, onDocumentUpdated, onDocumen
             const handleError = (error) => {
                 console.error('Erro ao alterar visibilidade:', error);
                 setIsLoading(false);
-                
+
                 // Remover listeners após erro
                 socketService.off('document-visibility-updated', handleVisibilityUpdated);
                 socketService.off('document-error', handleError);
@@ -45,7 +47,9 @@ const SettingsModal = ({ document, isOpen, onClose, onDocumentUpdated, onDocumen
             console.error('Erro ao alterar visibilidade:', error);
             setIsLoading(false);
         }
-    };    const handleDeleteDocument = async () => {
+    };
+
+    const handleDeleteDocument = async () => {
         setIsLoading(true);
         try {
             // Usar WebSocket em vez de HTTP
@@ -60,7 +64,7 @@ const SettingsModal = ({ document, isOpen, onClose, onDocumentUpdated, onDocumen
                     onDocumentDeleted(document.id);
                     onClose();
                     setIsLoading(false);
-                    
+
                     // Remover listener após uso
                     socketService.off('document-deleted', handleDocumentDeleted);
                 }
@@ -69,7 +73,7 @@ const SettingsModal = ({ document, isOpen, onClose, onDocumentUpdated, onDocumen
             const handleError = (error) => {
                 console.error('Erro ao deletar documento:', error);
                 setIsLoading(false);
-                
+
                 // Remover listeners após erro
                 socketService.off('document-deleted', handleDocumentDeleted);
                 socketService.off('document-error', handleError);
@@ -102,7 +106,7 @@ const SettingsModal = ({ document, isOpen, onClose, onDocumentUpdated, onDocumen
                         <p className="settings-description">
                             Controle quem pode visualizar este documento
                         </p>
-                        
+
                         <div className="visibility-options">
                             <label className={`visibility-option ${!isPublic ? 'active' : ''}`}>
                                 <input
@@ -146,7 +150,7 @@ const SettingsModal = ({ document, isOpen, onClose, onDocumentUpdated, onDocumen
                         <p className="settings-description">
                             Ações irreversíveis que afetam permanentemente este documento
                         </p>
-                        
+
                         {!showDeleteConfirm ? (
                             <button
                                 className="btn-danger"

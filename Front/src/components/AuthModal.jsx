@@ -26,10 +26,10 @@ const AuthModal = ({ isOpen, onClose }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!isLogin && formData.password !== formData.confirmPassword) {
       return;
-    }    try {
+    } try {
       if (isLogin) {
         await dispatch(loginUser(formData.email, formData.password)).unwrap();
       } else {
@@ -59,7 +59,7 @@ const AuthModal = ({ isOpen, onClose }) => {
       <div className="auth-modal">
         <div className="auth-modal-header">
           <h2>{isLogin ? 'Entrar' : 'Criar Conta'}</h2>
-          <button 
+          <button
             className="auth-modal-close"
             onClick={onClose}
             disabled={loading}
@@ -170,8 +170,8 @@ const AuthModal = ({ isOpen, onClose }) => {
             </div>
           )}
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className="btn-primary auth-submit"
             disabled={loading || (!isLogin && formData.password !== formData.confirmPassword)}
           >
@@ -182,8 +182,8 @@ const AuthModal = ({ isOpen, onClose }) => {
         <div className="auth-switch">
           <p>
             {isLogin ? 'Não tem uma conta?' : 'Já tem uma conta?'}
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={toggleMode}
               disabled={loading}
               className="auth-switch-btn"

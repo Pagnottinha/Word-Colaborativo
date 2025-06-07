@@ -54,20 +54,15 @@ const DocumentEditor = ({ document: initialDocument, onBack }) => {
         const newContent = e.target.value;
         const cursorPosition = e.target.selectionStart;
 
-        console.log('📝 Content changed:', { newContent: newContent.substring(0, 50) + '...', length: newContent.length, document: !!document });
-
         dispatch(updateContent(newContent));
         setLastCursorPosition(cursorPosition);
 
         if (document && document.id) {
-            console.log('📤 Sending text change for document:', document.id);
             socketService.sendTextChange(document.id, newContent, {
                 type: 'content-change',
                 position: cursorPosition,
                 timestamp: Date.now(),
             });
-        } else {
-            console.error('❌ Cannot send text change - no document or document ID:', document);
         }
     };
 
