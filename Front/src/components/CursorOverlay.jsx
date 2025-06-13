@@ -1,4 +1,5 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
+import { useCallback } from 'react';
 
 /**
  * CursorOverlay - Versão completamente reescrita
@@ -9,105 +10,12 @@ import React, { useMemo, useRef } from 'react';
  * 3. Sem elementos mirror complexos ou cálculos complicados
  */
 const CursorOverlay = ({ cursors, textareaRef }) => {
-  /**
-   * Gera uma cor consistente baseada no ID do usuário
-   */
-  const getUserColor = (userId) => {
-    let hash = 0;
-    for (let i = 0; i < userId.length; i++) {
-      hash = userId.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const hue = Math.abs(hash) % 360;
-    return `hsl(${hue}, 70%, 50%)`;
-  };
-  /**
-   * Calcula a posição de uma seleção de texto
-   * Retorna as coordenadas de início e fim da seleção
-   */
-  const getSelectionRange = (selection) => {
-    if (!textareaRef.current || !selection || selection.start === selection.end) {
-      return null;
-    }
-
-    try {
-      const textarea = textareaRef.current;
-      const text = textarea.value;
-      const { start, end } = selection;
-
-      // Verificar se a seleção é válida
-      if (start < 0 || end > text.length || start >= end) {
-        return null;
-      }
-
-      // Salvar estado atual do textarea
-      const originalStart = textarea.selectionStart;
-      const originalEnd = textarea.selectionEnd;
-      const originalScrollTop = textarea.scrollTop;
-      const originalScrollLeft = textarea.scrollLeft;
-
-      // Obter as dimensões e posição do textarea
-      const textareaRect = textarea.getBoundingClientRect();
-      const style = window.getComputedStyle(textarea);
-
-      // Métricas de texto
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      context.font = `${style.fontSize} ${style.fontFamily}`;
-
-      const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
-      const paddingLeft = parseFloat(style.paddingLeft) || 0;
-      const paddingTop = parseFloat(style.paddingTop) || 0;
-
-      // Calcular posições de início e fim
-      const getPositionCoords = (pos) => {
-        const lines = text.substring(0, pos).split('\n');
-        const currentLine = lines.length - 1;
-        const currentLineText = lines[lines.length - 1];
-
-        let textWidth = 0;
-        if (pos > 0 && currentLineText.length > 0) {
-          textWidth = context.measureText(currentLineText).width;
-        }
-
-        const x = paddingLeft + textWidth - textarea.scrollLeft;
-        const y = paddingTop + (currentLine * lineHeight) - textarea.scrollTop;
-
-        return { x: Math.round(x), y: Math.round(y), line: currentLine };
-      };
-
-      const startCoords = getPositionCoords(start);
-      const endCoords = getPositionCoords(end);
-
-      // Restaurar estado original
-      textarea.setSelectionRange(originalStart, originalEnd);
-      textarea.scrollTop = originalScrollTop;
-      textarea.scrollLeft = originalScrollLeft;
-
-      // Verificar se está dentro dos limites visíveis
-      if (startCoords.x < 0 || startCoords.y < 0 || endCoords.x < 0 || endCoords.y < 0 ||
-        startCoords.x > textarea.clientWidth || endCoords.x > textarea.clientWidth ||
-        startCoords.y > textarea.clientHeight || endCoords.y > textarea.clientHeight) {
-        return null;
-      }
-
-      return {
-        start: startCoords,
-        end: endCoords,
-        isMultiline: startCoords.line !== endCoords.line,
-        selectedText: text.substring(start, end)
-      };
-
-    } catch (error) {
-      console.error('Error calculating selection range:', error);
-      return null;
-    }
-  };
 
   /**
    * Método simples e direto para calcular posição do cursor
    * Usa apenas APIs nativas do browser
    */
-  const getCursorPosition = (position) => {
+  const getCursorPosition = useCallback((position) => {
     if (!textareaRef.current || typeof position !== 'number') {
       return null;
     }
@@ -195,7 +103,104 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
       console.error('Error calculating cursor position:', error);
       return null;
     }
-  };  /**
+  }, [textareaRef]);
+
+  /**
+   * Calcula a posição de uma seleção de texto
+   * Retorna as coordenadas de início e fim da seleção
+   */
+  const getSelectionRange = useCallback((selection) => {
+    if (!textareaRef.current || !selection || selection.start === selection.end) {
+      return null;
+    }
+
+    try {
+      const textarea = textareaRef.current;
+      const text = textarea.value;
+      const { start, end } = selection;
+
+      // Verificar se a seleção é válida
+      if (start < 0 || end > text.length || start >= end) {
+        return null;
+      }
+
+      // Salvar estado atual do textarea
+      const originalStart = textarea.selectionStart;
+      const originalEnd = textarea.selectionEnd;
+      const originalScrollTop = textarea.scrollTop;
+      const originalScrollLeft = textarea.scrollLeft;
+
+      // Obter as dimensões e posição do textarea
+      const textareaRect = textarea.getBoundingClientRect();
+      const style = window.getComputedStyle(textarea);
+
+      // Métricas de texto
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      context.font = `${style.fontSize} ${style.fontFamily}`;
+
+      const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
+      const paddingLeft = parseFloat(style.paddingLeft) || 0;
+      const paddingTop = parseFloat(style.paddingTop) || 0;
+
+      // Calcular posições de início e fim
+      const getPositionCoords = (pos) => {
+        const lines = text.substring(0, pos).split('\n');
+        const currentLine = lines.length - 1;
+        const currentLineText = lines[lines.length - 1];
+
+        let textWidth = 0;
+        if (pos > 0 && currentLineText.length > 0) {
+          textWidth = context.measureText(currentLineText).width;
+        }
+
+        const x = paddingLeft + textWidth - textarea.scrollLeft;
+        const y = paddingTop + (currentLine * lineHeight) - textarea.scrollTop;
+
+        return { x: Math.round(x), y: Math.round(y), line: currentLine };
+      };
+
+      const startCoords = getPositionCoords(start);
+      const endCoords = getPositionCoords(end);
+
+      // Restaurar estado original
+      textarea.setSelectionRange(originalStart, originalEnd);
+      textarea.scrollTop = originalScrollTop;
+      textarea.scrollLeft = originalScrollLeft;
+
+      // Verificar se está dentro dos limites visíveis
+      if (startCoords.x < 0 || startCoords.y < 0 || endCoords.x < 0 || endCoords.y < 0 ||
+        startCoords.x > textarea.clientWidth || endCoords.x > textarea.clientWidth ||
+        startCoords.y > textarea.clientHeight || endCoords.y > textarea.clientHeight) {
+        return null;
+      }
+
+      return {
+        start: startCoords,
+        end: endCoords,
+        isMultiline: startCoords.line !== endCoords.line,
+        selectedText: text.substring(start, end)
+      };
+
+    } catch (error) {
+      console.error('Error calculating selection range:', error);
+      return null;
+    }
+  }, [textareaRef]); 
+
+  /**
+   * Gera uma cor consistente baseada no ID do usuário
+   */
+  const getUserColor = (userId) => {
+    let hash = 0;
+    for (let i = 0; i < userId.length; i++) {
+      hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 70%, 50%)`;
+  };
+  
+  /**
    * Renderizar cursores e seleções colaborativas
    */
   const renderedElements = useMemo(() => {
@@ -378,7 +383,9 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
       })
       .flat()
       .filter(Boolean);
-  }, [cursors]); return (
+  }, [cursors, getSelectionRange, getCursorPosition, textareaRef]); 
+  
+  return (
     <div
       className="cursor-overlay"
       style={{

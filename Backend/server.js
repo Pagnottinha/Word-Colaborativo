@@ -1,21 +1,21 @@
-const express = require('express');
-const http = require('http');
-const socketIo = require('socket.io');
-const cors = require('cors');
+import express from 'express';
+import http from 'http';
+import { Server as SocketIoServer } from 'socket.io';
+import cors from 'cors';
 
 // Importar configurações e módulos
-const config = require('./src/config');
-const database = require('./src/database');
-const authRoutes = require('./src/routes/auth');
-const { setupSocketHandlers } = require('./src/socket');
-const documentService = require('./src/services/documentService');
+import config from './src/config/index.js';
+import database from './src/database/index.js';
+import authRoutes from './src/routes/auth.js';
+import { setupSocketHandlers } from './src/socket/index.js';
+import documentService from './src/services/documentService.js';
 
 // Criar aplicação Express
 const app = express();
 const server = http.createServer(app);
 
 // Configurar Socket.IO
-const io = socketIo(server, config.SOCKET_IO_OPTIONS);
+const io = new SocketIoServer(server, config.SOCKET_IO_OPTIONS);
 
 // Middleware
 app.use(cors());

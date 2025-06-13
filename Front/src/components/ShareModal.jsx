@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FiShare2, FiX, FiUserPlus, FiUsers, FiEdit3, FiEye, FiTrash2 } from 'react-icons/fi';
 import socketService from '../services/socketService';
+import { useCallback } from 'react';
 
 const ShareModal = ({ document, isOpen, onClose }) => {
   const [shareEmail, setShareEmail] = useState('');
@@ -9,6 +10,12 @@ const ShareModal = ({ document, isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const loadShares = useCallback(() => {
+    if (document) {
+      setLoading(true);
+      socketService.socket.emit('get-document-shares', { documentId: document.id });
+    }
+  }, [document]);
 
   useEffect(() => {
     if (isOpen && document) {
@@ -52,14 +59,7 @@ const ShareModal = ({ document, isOpen, onClose }) => {
         socketService.socket.off('document-error', handleDocumentError);
       };
     }
-  }, [isOpen, document]);
-
-  const loadShares = () => {
-    if (document) {
-      setLoading(true);
-      socketService.socket.emit('get-document-shares', { documentId: document.id });
-    }
-  };
+  }, [isOpen, document, loadShares]);
 
   const handleShare = (e) => {
     e.preventDefault();

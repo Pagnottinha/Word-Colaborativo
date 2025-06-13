@@ -1,5 +1,5 @@
-const jwt = require('jsonwebtoken');
-const config = require('../config');
+import jwt from 'jsonwebtoken';
+import config from '../config/index.js';
 
 /**
  * Middleware para autenticação JWT
@@ -32,7 +32,7 @@ const verifySocketToken = (token) => {
   }
 };
 
-module.exports = {
+export {
   authenticateToken,
   verifySocketToken
 };

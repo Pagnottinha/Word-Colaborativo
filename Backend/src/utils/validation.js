@@ -40,7 +40,7 @@ const isValidPermissionType = (permission) => {
   return ['read', 'write'].includes(permission);
 };
 
-module.exports = {
+export {
   isValidEmail,
   isNonEmptyString,
   isValidUUID,

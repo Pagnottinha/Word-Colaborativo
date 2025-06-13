@@ -1,8 +1,8 @@
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
-const database = require('../database');
-const config = require('../config');
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
+import database from '../database/index.js';
+import config from '../config/index.js';
 
 class AuthService {
   async register(username, email, password) {
@@ -115,4 +115,5 @@ class AuthService {
   }
 }
 
-module.exports = new AuthService();
+const authService = new AuthService();
+export default authService;

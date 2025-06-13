@@ -1,6 +1,6 @@
-const documentService = require('../services/documentService');
-const { broadcastDocumentListUpdate, broadcastDocumentListUpdateToAll } = require('../services/broadcastService');
-const database = require('../database');
+import documentService from '../services/documentService.js';
+import { broadcastDocumentListUpdate, broadcastDocumentListUpdateToAll } from '../services/broadcastService.js';
+import database from '../database/index.js';
 
 /**
  * Configura os event handlers de documentos para um socket
@@ -380,6 +380,4 @@ const setupDocumentHandlers = (socket, io) => {
   });
 };
 
-module.exports = {
-  setupDocumentHandlers
-};
+export { setupDocumentHandlers };

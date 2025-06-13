@@ -1,4 +1,4 @@
-const documentService = require('../services/documentService');
+import documentService from '../services/documentService.js';
 
 /**
  * Broadcast da lista de documentos para um usuário específico
@@ -49,7 +49,7 @@ const broadcastDocumentUpdate = async (documentId, userId) => {
   }
 };
 
-module.exports = {
+export {
   broadcastDocumentListUpdate,
   broadcastDocumentListUpdateToAll,
   broadcastDocumentUpdate

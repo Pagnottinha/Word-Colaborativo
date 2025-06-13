@@ -2,17 +2,18 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { FiPlus, FiFileText, FiEdit3, FiLock, FiGlobe, FiUsers, FiShare2, FiTrash2, FiMoreVertical } from 'react-icons/fi';
 import socketService from '../services/socketService';
-import { setDocuments, addDocument, setLoading, setError } from '../store/slices/documentsSlice';
+import { setLoading } from '../store/slices/documentsSlice';
 
-const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch = useDispatch();
-  const { ownDocuments, sharedDocuments, publicDocuments, isLoading, error } = useSelector(state => state.documents);const [newDocTitle, setNewDocTitle] = useState('');
+const DocumentsList = ({ onDocumentSelect }) => {
+  const dispatch = useDispatch();
+  const { ownDocuments, sharedDocuments, publicDocuments, isLoading, error } = useSelector(state => state.documents); const [newDocTitle, setNewDocTitle] = useState('');
   const [isPublic, setIsPublic] = useState(false);
-  const [showNewDocForm, setShowNewDocForm] = useState(false);  const [deleteConfirm, setDeleteConfirm] = useState(null); // ID do documento para confirmar deleção
+  const [showNewDocForm, setShowNewDocForm] = useState(false); const [deleteConfirm, setDeleteConfirm] = useState(null); // ID do documento para confirmar deleção
 
   useEffect(() => {
     // Load documents when component mounts
     dispatch(setLoading(true));
-    
+
     // Small delay to ensure WebSocket connection is established
     const loadTimer = setTimeout(() => {
       socketService.getDocuments();
@@ -21,10 +22,6 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
     return () => clearTimeout(loadTimer);
   }, [dispatch]);
 
-  const loadDocuments = () => {
-    dispatch(setLoading(true));
-    socketService.getDocuments();
-  };
   const handleCreateDocument = (e) => {
     e.preventDefault();
     if (!newDocTitle.trim()) return;
@@ -33,7 +30,9 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
     setNewDocTitle('');
     setIsPublic(false);
     setShowNewDocForm(false);
-  };  const handleDeleteDocument = (documentId, documentTitle) => {
+  }; 
+  
+  const handleDeleteDocument = (documentId) => {
     if (deleteConfirm === documentId) {
       // Confirmar deleção
       socketService.deleteDocument(documentId);
@@ -47,19 +46,20 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
   const cancelDelete = () => {
     setDeleteConfirm(null);
   };
+
   const formatDate = (dateString) => {
     if (!dateString) {
       return 'Data não disponível';
     }
-    
+
     const date = new Date(dateString);
-    
+
     // Verificar se a data é válida
     if (isNaN(date.getTime())) {
       console.warn('Invalid date string:', dateString);
       return 'Data inválida';
     }
-    
+
     return date.toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
@@ -81,13 +81,13 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
   }
 
   return (
-    <div className="documents-list">      
+    <div className="documents-list">
       <div className="documents-header">
         <h2>
           <FiFileText size={24} />
           Meus Documentos
         </h2>
-        <button 
+        <button
           className="btn-primary"
           onClick={() => setShowNewDocForm(true)}
         >
@@ -100,7 +100,7 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
         <div className="error-message">
           {error}
         </div>
-      )}      
+      )}
       {showNewDocForm && (
         <div className="new-document-form">
           <form onSubmit={handleCreateDocument}>
@@ -125,9 +125,9 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
             <div className="form-actions">
               <button type="submit" className="btn-primary">
                 Criar
-              </button>              
-              <button 
-                type="button" 
+              </button>
+              <button
+                type="button"
                 className="btn-secondary"
                 onClick={() => {
                   setShowNewDocForm(false);
@@ -140,7 +140,7 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
             </div>
           </form>
         </div>
-      )}      
+      )}
       <div className="documents-grid">
         {/* Seção de Documentos Próprios */}
         {ownDocuments.length > 0 && (
@@ -148,10 +148,10 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
             <div className="section-header">
               <h3><FiEdit3 size={20} /> Meus Documentos</h3>
             </div>
-            <div className="documents-cards">              
-            {ownDocuments.map((doc) => (
-                <div 
-                  key={doc.id} 
+            <div className="documents-cards">
+              {ownDocuments.map((doc) => (
+                <div
+                  key={doc.id}
                   className="document-card own-document"
                 >
                   <div className="document-header">
@@ -161,7 +161,7 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
                     <div className="document-actions">
                       {deleteConfirm === doc.id ? (
                         <>
-                          <button 
+                          <button
                             className="btn-danger-small"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -171,7 +171,7 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
                           >
                             <FiTrash2 size={14} />
                           </button>
-                          <button 
+                          <button
                             className="btn-secondary-small"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -183,7 +183,7 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
                           </button>
                         </>
                       ) : (
-                        <button 
+                        <button
                           className="btn-danger-small"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -196,7 +196,7 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
                       )}
                     </div>
                   </div>
-                  <div 
+                  <div
                     className="document-content"
                     onClick={() => {
                       console.log('Document card clicked:', doc);
@@ -219,7 +219,7 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
                 </div>
               ))}
             </div>
-          </div>        
+          </div>
         )}
 
         {/* Seção de Documentos Compartilhados */}
@@ -230,8 +230,8 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
             </div>
             <div className="documents-cards">
               {sharedDocuments.map((doc) => (
-                <div 
-                  key={doc.id} 
+                <div
+                  key={doc.id}
                   className="document-card shared-document"
                   onClick={() => {
                     console.log('Shared document card clicked:', doc);
@@ -266,8 +266,8 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
             </div>
             <div className="documents-cards">
               {publicDocuments.map((doc) => (
-                <div 
-                  key={doc.id} 
+                <div
+                  key={doc.id}
                   className="document-card public-document"
                   onClick={() => {
                     console.log('Public document card clicked:', doc);
@@ -286,7 +286,7 @@ const DocumentsList = ({ onDocumentSelect, onNewDocument }) => {  const dispatch
               ))}
             </div>
           </div>
-        )}        
+        )}
         {/* Estado vazio */}
         {ownDocuments.length === 0 && sharedDocuments.length === 0 && publicDocuments.length === 0 && (
           <div className="empty-state">

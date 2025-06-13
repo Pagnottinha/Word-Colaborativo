@@ -1,4 +1,4 @@
-const documentService = require('../services/documentService');
+import documentService from '../services/documentService.js';
 
 /**
  * Configura os event handlers de colaboração em tempo real para um socket
@@ -118,6 +118,4 @@ const setupCollaborationHandlers = (socket, io) => {
   });
 };
 
-module.exports = {
-  setupCollaborationHandlers
-};
+export { setupCollaborationHandlers };

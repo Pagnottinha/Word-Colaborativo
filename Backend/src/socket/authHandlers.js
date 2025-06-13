@@ -1,6 +1,6 @@
-const { verifySocketToken } = require('../middleware/auth');
-const documentService = require('../services/documentService');
-const authService = require('../services/authService');
+import { verifySocketToken } from '../middleware/auth.js';
+import documentService from '../services/documentService.js';
+import authService from '../services/authService.js';
 
 /**
  * Configura os event handlers de autenticação para um socket
@@ -57,6 +57,4 @@ const setupAuthHandlers = (socket, io) => {
   });
 };
 
-module.exports = {
-  setupAuthHandlers
-};
+export { setupAuthHandlers };

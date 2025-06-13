@@ -1,6 +1,6 @@
-const { setupAuthHandlers } = require('./authHandlers');
-const { setupDocumentHandlers } = require('./documentHandlers');
-const { setupCollaborationHandlers } = require('./collaborationHandlers');
+import { setupAuthHandlers } from './authHandlers.js';
+import { setupDocumentHandlers } from './documentHandlers.js';
+import { setupCollaborationHandlers } from './collaborationHandlers.js';
 
 /**
  * Configura todos os event handlers para um socket
@@ -18,6 +18,4 @@ const setupSocketHandlers = (socket, io) => {
   setupCollaborationHandlers(socket, io);
 };
 
-module.exports = {
-  setupSocketHandlers
-};
+export { setupSocketHandlers };
