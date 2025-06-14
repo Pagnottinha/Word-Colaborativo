@@ -60,8 +60,26 @@ class SocketService {
     });
 
     this.socket.on('text-change', (data) => {
-      const { content } = data;
-      store.dispatch({ type: 'document/updateContent', payload: content });
+      const { content, operation = {}, userId } = data;
+      const currentState = store.getState();
+      const currentUserId = currentState?.auth?.user?.id?.toString();
+
+      // Verificar se a atualização é do próprio usuário e ignorar
+      if (userId && userId === currentUserId) {
+        console.log('Ignoring echo of own text change');
+        return;
+      }
+
+      // Criar um evento customizado para que o componente DocumentEditor possa 
+      // decidir se aceita esta atualização baseado no timestamp e estado local
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('remoteTextChange', {
+          detail: { content, timestamp: operation.timestamp }
+        }));
+      } else {
+        // Fallback direto se o evento customizado não for possível
+        store.dispatch({ type: 'document/updateContent', payload: content });
+      }
     });
 
     this.socket.on('title-change', (data) => {
@@ -247,12 +265,12 @@ class SocketService {
       store.dispatch({ type: 'documents/addDocument', payload: data.document });
       // Automaticamente mudar para o documento recém-criado
       store.dispatch({ type: 'document/setCurrentDocument', payload: data.document });
-    }); 
-    
+    });
+
     this.socket.on('document-added', (data) => {
       store.dispatch({ type: 'documents/addDocument', payload: data.document });
-    }); 
-    
+    });
+
     this.socket.on('document-deleted', (data) => {
       console.log('Document deleted:', data);
       // Recarregar a lista de documentos para remover o documento deletado
@@ -303,7 +321,9 @@ class SocketService {
     } else {
       console.log('Cannot authenticate - socket:', !!this.socket, 'isAuthenticating:', this.isAuthenticating);
     }
-  }  // Verificar se está autenticado antes de fazer operações
+  }
+
+  // Verificar se está autenticado antes de fazer operações
   ensureAuthenticated() {
     // Se já está autenticado, retornar true
     if (this.isAuthenticated) {
@@ -369,15 +389,22 @@ class SocketService {
       this.store.dispatch({ type: 'collaboration/clearCollaboration' });
     }
   }
-
   /**
    * Envia alterações de texto para o documento
    * @param {string} documentId ID do documento
    * @param {string} content Conteúdo atualizado
    * @param {object} operation Informações sobre a operação
-   */  sendTextChange(documentId, content, operation) {
+   */
+  sendTextChange(documentId, content, operation) {
     if (this.socket && this.ensureAuthenticated()) {
-      this.socket.emit('text-change', { documentId, content, operation });
+      const currentUserId = this.store?.getState()?.auth?.user?.id;
+
+      this.socket.emit('text-change', {
+        documentId,
+        content,
+        operation,
+        userId: currentUserId // Incluir ID do usuário para evitar ecos
+      });
     }
   }
 
@@ -396,34 +423,95 @@ class SocketService {
    * @param {string} documentId ID do documento
    * @param {number} position Posição do cursor
    * @param {object} selection Informações sobre seleção (início e fim)
-   */  sendCursorPosition(documentId, position, selection) {
-    if (!this.socket || !this.ensureAuthenticated()) {
+   */  sendCursorPosition(documentId, position, selection = null) {
+    if (!this.isAuthenticated || !this.socket || !documentId) return;
+
+    const now = Date.now();
+    const minInterval = 100; // Limite máximo de 10 atualizações por segundo
+
+    // Se já estiver em andamento uma atualização recente, enfileirar
+    if (this.cursorUpdateInProgress || now - this.lastCursorUpdateTime < minInterval) {
+      // Substituir qualquer atualização pendente com a mais recente
+      this.cursorUpdateQueue = [{
+        documentId,
+        position,
+        selection,
+        timestamp: now
+      }];
+
+      // Processar a fila se ainda não estiver processando
+      if (!this.cursorUpdateInProgress) {
+        this._processCursorQueue();
+      }
+
       return;
     }
 
-    // Enviar imediatamente sem fila para melhor responsividade
-    this.socket.emit('cursor-position', { documentId, position, selection });
-
-    // Atualizar o cursor local para debugging e testes
-    const currentUser = this.store?.getState()?.auth?.user;
-    if (currentUser) {
-      // Identificar explicitamente este cursor como currentUser para filtragem
-      this.store.dispatch({
-        type: 'collaboration/updateCursor',
-        payload: {
-          userId: 'currentUser', // Usar 'currentUser' como identificador fixo do próprio usuário
-          originalUserId: currentUser.id, // Guardar o ID original para referência
-          username: currentUser.username || 'Você',
-          position,
-          selection,
-          timestamp: Date.now(),
-          lastUpdate: Date.now(),
-          isCurrentUser: true
-        }
-      });
-    }
+    // Enviar imediatamente se não houver atualizações recentes
+    this._sendCursorPositionImmediate(documentId, position, selection, now);
   }
 
+  // Método privado para processar a fila de atualizações de cursor
+  _processCursorQueue() {
+    if (this.cursorUpdateQueue.length === 0) {
+      this.cursorUpdateInProgress = false;
+      return;
+    }
+
+    this.cursorUpdateInProgress = true;
+
+    // Obter a atualização mais recente da fila
+    const update = this.cursorUpdateQueue.pop();
+    this.cursorUpdateQueue = []; // Limpar fila restante
+
+    // Enviar a atualização mais recente
+    this._sendCursorPositionImmediate(
+      update.documentId,
+      update.position,
+      update.selection,
+      update.timestamp
+    );
+
+    // Programar próximo processamento após o intervalo mínimo
+    setTimeout(() => {
+      this.cursorUpdateInProgress = false;
+      if (this.cursorUpdateQueue.length > 0) {
+        this._processCursorQueue();
+      }
+    }, 100);
+  }
+
+  // Método privado para envio imediato de posição do cursor
+  _sendCursorPositionImmediate(documentId, position, selection, timestamp) {
+    if (!this.isAuthenticated || !this.socket) return;
+
+    const user = this.store?.getState()?.auth?.user;
+    if (!user) return;
+
+    try {
+      // Validar posição antes de enviar
+      if (position !== undefined && position !== null &&
+        !isNaN(position) && isFinite(position) &&
+        typeof position === 'number') {
+
+        console.log(`Sending cursor position: ${position}`);
+        this.socket.emit('cursor-position', {
+          documentId,
+          userId: user.id,
+          username: user.username || user.name || user.email || 'Anônimo',
+          position,
+          selection,
+          timestamp
+        });
+
+        this.lastCursorUpdateTime = timestamp;
+      } else {
+        console.warn('Invalid cursor position, not sending:', position);
+      }
+    } catch (error) {
+      console.error('Error sending cursor position:', error);
+    }
+  }
   /**
    * Processa a fila de atualizações de cursor
    */

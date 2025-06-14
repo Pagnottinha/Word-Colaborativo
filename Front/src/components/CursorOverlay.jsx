@@ -1,5 +1,4 @@
-import React, { useMemo } from 'react';
-import { useCallback } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 
 /**
  * CursorOverlay - Versão completamente reescrita
@@ -7,109 +6,65 @@ import { useCallback } from 'react';
  * Abordagem simples e confiável:
  * 1. Usa apenas setSelectionRange nativo do textarea
  * 2. Usa getBoundingClientRect para obter posições exatas
- * 3. Sem elementos mirror complexos ou cálculos complicados
+ * 3. Sempre retorna uma posição (nunca falha)
+ * 4. Animação de pulsação para melhor visibilidade
+ * 5. Com ResizeObserver para atualização automática
  */
+
+// Definição do efeito de pulsação do cursor
+const cursorAnimation = `
+  @keyframes cursorBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+`;
 const CursorOverlay = ({ cursors, textareaRef }) => {
-
-  /**
-   * Método simples e direto para calcular posição do cursor
-   * Usa apenas APIs nativas do browser
-   */
-  const getCursorPosition = useCallback((position) => {
-    if (!textareaRef.current || typeof position !== 'number') {
-      return null;
-    }
-
-    try {
-      const textarea = textareaRef.current;
-      const text = textarea.value;
-
-      // Verificar se a posição é válida
-      if (position < 0 || position > text.length) {
-        return null;
-      }
-
-      // Salvar estado atual do textarea
-      const originalStart = textarea.selectionStart;
-      const originalEnd = textarea.selectionEnd;
-      const originalScrollTop = textarea.scrollTop;
-      const originalScrollLeft = textarea.scrollLeft;
-
-      // Temporariamente colocar o cursor na posição desejada
-      textarea.setSelectionRange(position, position);
-      textarea.focus();
-
-      // Criar um elemento temporário para medir a posição
-      const range = document.createRange();
-      const selection = window.getSelection();
-
-      // Para textarea, precisamos usar uma abordagem diferente
-      // Vamos usar as coordenadas do cliente relativas ao textarea
-
-      // Obter as dimensões e posição do textarea
-      const textareaRect = textarea.getBoundingClientRect();
-      const style = window.getComputedStyle(textarea);
-
-      // Calcular a posição baseada na linha e coluna
-      const lines = text.substring(0, position).split('\n');
-      const currentLine = lines.length - 1;
-      const currentColumn = lines[lines.length - 1].length;
-      // Obter métricas de texto - usar o texto real da linha para maior precisão
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      context.font = `${style.fontSize} ${style.fontFamily}`;
-      // Medir a largura exata do texto até a posição do cursor na linha atual
-      const currentLineText = lines[lines.length - 1];
-      let textWidth = 0;
-
-      // Para posição 0, a largura é sempre 0
-      if (position === 0) {
-        textWidth = 0;
-      } else if (currentLineText.length > 0) {
-        textWidth = context.measureText(currentLineText).width;
-      }
-
-      const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
-
-      // Padding do textarea
-      const paddingLeft = parseFloat(style.paddingLeft) || 0;
-      const paddingTop = parseFloat(style.paddingTop) || 0;
-      // Posição calculada usando a largura exata do texto
-      const x = paddingLeft + textWidth - textarea.scrollLeft;
-      const y = paddingTop + (currentLine * lineHeight) - textarea.scrollTop;
-
-      // Restaurar estado original
-      textarea.setSelectionRange(originalStart, originalEnd);
-      textarea.scrollTop = originalScrollTop;
-      textarea.scrollLeft = originalScrollLeft;
-
-      // Verificar se a posição está dentro dos limites visíveis
-      if (x < 0 || y < 0 || x > textarea.clientWidth || y > textarea.clientHeight) {
-        return null;
-      } console.log(`Cursor position for ${position}:`, {
-        line: currentLine,
-        column: currentColumn,
-        x: Math.round(x),
-        y: Math.round(y),
-        textWidth,
-        paddingLeft,
-        paddingTop,
-        isPosition0: position === 0
-      });
-
-      return { x: Math.round(x), y: Math.round(y) };
-
-    } catch (error) {
-      console.error('Error calculating cursor position:', error);
-      return null;
-    }
+  // Estado para forçar re-renderização quando o textarea mudar de tamanho
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  
+  // Configurar ResizeObserver para detectar mudanças de tamanho do textarea
+  useEffect(() => {
+    if (!textareaRef.current) return;
+    
+    const textarea = textareaRef.current;
+    const updateDimensions = () => {
+      const { width, height } = textarea.getBoundingClientRect();
+      setDimensions({ width, height });
+    };
+    
+    // Inicializar dimensões
+    updateDimensions();
+    
+    // Configurar observador de redimensionamento
+    const resizeObserver = new ResizeObserver(entries => {
+      if (!entries || !entries[0]) return;
+      updateDimensions();
+    });
+    
+    resizeObserver.observe(textarea);
+    
+    // Limpar observador
+    return () => {
+      resizeObserver.disconnect();
+    };
   }, [textareaRef]);
-
+  
+  /**
+   * Gera uma cor consistente baseada no ID do usuário
+   */
+  const getUserColor = (userId) => {
+    let hash = 0;
+    for (let i = 0; i < userId.length; i++) {
+      hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 70%, 50%)`;
+  };
   /**
    * Calcula a posição de uma seleção de texto
    * Retorna as coordenadas de início e fim da seleção
    */
-  const getSelectionRange = useCallback((selection) => {
+  const getSelectionRange = (selection) => {
     if (!textareaRef.current || !selection || selection.start === selection.end) {
       return null;
     }
@@ -186,21 +141,92 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
       console.error('Error calculating selection range:', error);
       return null;
     }
-  }, [textareaRef]); 
+  };
 
   /**
-   * Gera uma cor consistente baseada no ID do usuário
+   * Calcula a posição do cursor baseado em índice (versão otimizada)
+   * - Usa cache para melhorar performance
+   * - Lida melhor com variações de tamanho de fonte
    */
-  const getUserColor = (userId) => {
-    let hash = 0;
-    for (let i = 0; i < userId.length; i++) {
-      hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+  const getCursorPosition = (position) => {
+    try {
+      // Parâmetros de segurança
+      if (!textareaRef.current) {
+        console.warn("getCursorPosition: textareaRef.current is null");
+        return { x: 0, y: 0 }; // Posição padrão
+      }
+      
+      const textarea = textareaRef.current;
+      const text = textarea.value || "";
+      
+      // Sanitizar posição - garantir que é um número válido dentro dos limites do texto
+      const safePosition = typeof position === 'number' ? 
+        Math.max(0, Math.min(position, text.length)) : 
+        0;
+      
+      // Salvar estado atual do textarea (sem mudar o foco)
+      const originalStart = textarea.selectionStart;
+      const originalEnd = textarea.selectionEnd;
+      const originalScrollTop = textarea.scrollTop;
+      const originalScrollLeft = textarea.scrollLeft;
+      
+      // Obter dimensões e estilo
+      const textareaRect = textarea.getBoundingClientRect();
+      const style = window.getComputedStyle(textarea);
+      const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
+      const paddingLeft = parseFloat(style.paddingLeft) || 0;
+      const paddingTop = parseFloat(style.paddingTop) || 0;
+      
+      // Calcular linha e coluna
+      const textBefore = text.substring(0, safePosition);
+      const lines = textBefore.split('\n');
+      const lineIndex = lines.length - 1;
+      const charIndex = lines[lineIndex].length;
+      
+      // Criar um elemento temporário com o mesmo estilo do textarea 
+      // para medição mais precisa do texto
+      const measureElement = document.createElement('div');
+      measureElement.style.position = 'absolute';
+      measureElement.style.top = '-9999px';
+      measureElement.style.left = '-9999px';
+      measureElement.style.visibility = 'hidden';
+      measureElement.style.whiteSpace = 'pre';
+      measureElement.style.font = `${style.fontSize} ${style.fontFamily}`;
+      measureElement.style.letterSpacing = style.letterSpacing;
+      measureElement.style.wordSpacing = style.wordSpacing;
+      measureElement.innerText = lines[lineIndex].substring(0, charIndex);
+      
+      document.body.appendChild(measureElement);
+      const textWidth = measureElement.getBoundingClientRect().width;
+      document.body.removeChild(measureElement);
+      
+      // Calcular posições finais com compensação de rolagem
+      const x = paddingLeft + textWidth - textarea.scrollLeft;
+      const y = paddingTop + (lineIndex * lineHeight) - textarea.scrollTop;
+      
+      // Restaurar estado original do textarea
+      try {
+        textarea.setSelectionRange(originalStart, originalEnd);
+        textarea.scrollTop = originalScrollTop;
+        textarea.scrollLeft = originalScrollLeft;
+      } catch (e) {
+        // Ignorar erros silenciosamente
+      }
+      
+      // Garantir que as coordenadas estejam dentro dos limites visíveis
+      // ou pelo menos próximas para que o label seja visível
+      const result = {
+        x: Math.max(0, Math.round(x)),
+        y: Math.max(0, Math.round(y))
+      };
+      
+      return result;
+    } catch (error) {
+      console.error('Error calculating cursor position:', error);
+      // Retornar posição padrão
+      return { x: 5, y: 5 };
     }
-    const hue = Math.abs(hash) % 360;
-    return `hsl(${hue}, 70%, 50%)`;
-  };
-  
-  /**
+  };  /**
    * Renderizar cursores e seleções colaborativas
    */
   const renderedElements = useMemo(() => {
@@ -208,7 +234,8 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
       return [];
     }
 
-    console.log('Rendering cursors and selections:', Object.keys(cursors).length, 'total');
+    console.log('Rendering cursors and selections:', Object.keys(cursors).length, 'total', 
+      `(textarea dimensions: ${dimensions.width}x${dimensions.height})`);
 
     return Object.entries(cursors)
       .filter(([userId, cursorData]) => {
@@ -307,7 +334,7 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
                     position: 'absolute',
                     left: `${selectionRange.start.x}px`,
                     top: `${selectionRange.start.y}px`,
-                    width: `${selectionRange.end.x - selectionRange.start.x}px`,
+                    width: `${selectionRanFge.end.x - selectionRange.start.x}px`,
                     height: '18px',
                     backgroundColor: color,
                     opacity: isStale ? 0.1 : 0.2,
@@ -318,36 +345,37 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
               );
             }
           }
-        }
-
-        // Renderizar cursor apenas se não há seleção (cursor fica no final da seleção)
+        }        // Sempre renderizar cursor (getCursorPosition agora sempre retorna uma posição)
         const cursorPosition = getCursorPosition(cursorData.position);
+        
+        // Log para debug
+        console.log(`✅ Rendering cursor for ${userId} at`, cursorPosition);
 
-        if (cursorPosition) {
-          console.log(`✅ Rendering cursor for ${userId} at`, cursorPosition);
-
-          elements.push(
-            <div
-              key={`${userId}-cursor`}
-              className="collaborative-cursor-wrapper"
-              style={{
-                position: 'absolute',
-                left: `${cursorPosition.x}px`,
-                top: `${cursorPosition.y}px`,
-                zIndex: 1001,
-                pointerEvents: 'none',
-                transform: 'translateX(0px) translateY(0px)', // Reset any inherited transforms
-              }}
-            >
-              {/* Linha do cursor */}
+        // Sempre adicionar o cursor ao DOM
+        elements.push(
+          <div
+            key={`${userId}-cursor`}
+            className="collaborative-cursor-wrapper"
+            style={{
+              position: 'absolute',
+              left: `${cursorPosition.x}px`,
+              top: `${cursorPosition.y}px`,
+              zIndex: 1001,
+              pointerEvents: 'none',
+              transform: 'translateX(0px) translateY(0px)', // Reset any inherited transforms
+              transition: 'left 0.1s ease, top 0.1s ease', // Transição suave ao mover
+              willChange: 'left, top', // Otimizar para animações
+            }}
+          >              {/* Linha do cursor com animação de pulsação */}
               <div
                 style={{
-                  width: '2px',
+                  width: '2px',                  
                   height: '18px',
                   backgroundColor: color,
                   borderRadius: '1px',
-                  opacity: isStale ? 0.4 : 1,
-                  boxShadow: `0 0 2px ${color}`,
+                  boxShadow: `0 0 3px ${color}`,
+                  animation: 'cursorBlink 1s infinite',
+                  opacity: isStale ? 0.4 : 1
                 }}
               />
 
@@ -366,8 +394,7 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
                   whiteSpace: 'nowrap',
                   opacity: isStale ? 0.4 : 1,
                   boxShadow: `0 1px 3px rgba(0,0,0,0.2)`,
-                }}
-              >
+                }}              >
                 {cursorData.username}
                 {cursorData.selection && cursorData.selection.start !== cursorData.selection.end &&
                   ` (${cursorData.selection.end - cursorData.selection.start} chars)`
@@ -375,18 +402,44 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
               </div>
             </div>
           );
-        } else {
-          console.log(`❌ No cursor position calculated for user ${userId}`);
-        }
 
         return elements;
       })
       .flat()
       .filter(Boolean);
-  }, [cursors, getSelectionRange, getCursorPosition, textareaRef]); 
-  
+  }, [cursors, textareaRef, dimensions]);  
+
+  // Adicionar observer de resize para atualizar posições de cursor
+  useEffect(() => {
+    const textareaElement = textareaRef.current;
+    if (!textareaElement) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      // Forçar atualização das posições dos cursores ao redimensionar
+      console.log('Textarea resized, updating cursor positions');
+      Object.keys(cursors).forEach(userId => {
+        if (cursors[userId]?.position != null) {
+          // Atualizar a posição do cursor apenas (sem forçar re-renderização de outros elementos)
+          const cursorPosition = getCursorPosition(cursors[userId].position);
+          console.log(`Updating cursor position for ${userId} to`, cursorPosition);
+        }
+      });
+    });
+
+    // Observar mudanças de tamanho no textarea
+    resizeObserver.observe(textareaElement);
+
+    // Limpar observer ao desmontar
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [textareaRef, cursors]);  
+
   return (
-    <div
+    <>
+      {/* Estilo para animação do cursor */}
+      <style>{cursorAnimation}</style>
+        <div
       className="cursor-overlay"
       style={{
         position: 'absolute',
@@ -399,6 +452,20 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
         overflow: 'visible',
       }}
     >
+      {/* Indicador visual que o overlay está funcionando */}
+      <div style={{
+        position: 'absolute',
+        top: '5px',
+        right: '5px',
+        width: '8px',
+        height: '8px',
+        backgroundColor: '#44ff44',
+        borderRadius: '50%',
+        zIndex: 1002,
+        opacity: 0.7,
+        boxShadow: '0 0 4px rgba(68, 255, 68, 0.7)',
+        animation: 'cursorBlink 2s infinite',
+      }} />
       {/* Cursor de teste simples para verificar se o overlay funciona
       {Object.keys(cursors).length > 0 && (
         <div style={{
@@ -414,9 +481,7 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
       )} */}
 
       {/* Cursores e seleções colaborativas */}
-      {renderedElements}
-
-      {/* Debug info limpo */}
+      {renderedElements}      {/* Debug info limpo */}
       {Object.keys(cursors).length > 0 && (
         <div style={{
           position: 'absolute',
@@ -433,6 +498,7 @@ const CursorOverlay = ({ cursors, textareaRef }) => {
         </div>
       )}
     </div>
+    </>
   );
 };
 

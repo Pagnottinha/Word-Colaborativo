@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { FiArrowLeft, FiUsers, FiShare2, FiSettings } from 'react-icons/fi';
 import { updateContent, updateTitle, setError } from '../store/slices/documentSlice';
@@ -6,7 +6,9 @@ import socketService from '../services/socketService';
 import CursorOverlay from './CursorOverlay';
 import ShareModal from './ShareModal';
 import SettingsModal from './SettingsModal';
-import { useCallback } from 'react';
+
+// Removemos a função de debounce para tornar as atualizações instantâneas
+// Isso melhora a experiência do usuário em um editor colaborativo
 
 const DocumentEditor = ({ document: initialDocument, onBack }) => {
     const dispatch = useDispatch();
@@ -17,56 +19,74 @@ const DocumentEditor = ({ document: initialDocument, onBack }) => {
     // Usar o documento do Redux se disponível, caso contrário usar o documento inicial
     const document = currentDocument || initialDocument;
     const isOwner = document && document.owner_id && document.owner_id.toString() === currentUserId;
+
+    // Referências para elementos DOM
     const textareaRef = useRef(null);
     const titleInputRef = useRef(null);
-    const [lastCursorPosition, setLastCursorPosition] = useState(-1); // Inicializar com -1 para permitir posição 0
+
+    // Estados para modais
     const [shareModalOpen, setShareModalOpen] = useState(false);
     const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
-    //console.log("TESTE: ", document, useSelector(state => state.auth.user?.id));
+    // Estados para controle de colaboração
+    const [lastCursorPosition, setLastCursorPosition] = useState(0);
 
-    const handleCursorMove = useCallback(() => {
-        if (textareaRef.current && document) {
-            // Verificar se o usuário tem permissão de escrita antes de enviar cursor
-            const isOwner = document.owner_id && document.owner_id.toString() === currentUserId;
-            const permissionType = isOwner
-                ? 'owner'
-                : document.permission_type;
+    // Controle de edição local e preservação de cursor usando refs para evitar re-renders
+    const localEditTimestampRef = useRef(Date.now());
+    const isLocalEditRef = useRef(false);
+    const lastContentRef = useRef('');
+    const selectionStateRef = useRef({ start: 0, end: 0 });
+    const pendingCursorUpdate = useRef(false);
 
-            // Não enviar posição do cursor se estiver em modo somente leitura
-            // Apenas bloquear se explicitamente for 'read' ou não tiver permissão de escrita
-            const isReadOnly = !isOwner && (permissionType === 'read' || !permissionType || permissionType === undefined);
+    // Usamos a lista de usuários conectados filtrada para remover entradas inválidas
+    const validConnectedUsers = useMemo(() => {
+        const validUsers = connectedUsers?.filter(user => user && (user.username || user.id || user.userId)) || [];
+        return validUsers.length > 0 ? validUsers : [{ id: 'current-user', username: 'Você' }];
+    }, [connectedUsers]);
 
-            if (isReadOnly) {
-                return;
-            }
+    //console.log("TESTE: ", document, useSelector(state => state.auth.user?.id));    // Função simplificada para enviar a posição do cursor para colaboração
+    const updateCursorPosition = useCallback(() => {
+        if (!textareaRef.current || !document) return;
 
-            const position = textareaRef.current.selectionStart;
-            const selectionStart = textareaRef.current.selectionStart;
-            const selectionEnd = textareaRef.current.selectionEnd;
+        // Verificar permissões
+        const canEdit = isOwner || document.permission_type === 'write';
+        if (!canEdit) return;
 
-            const selection = {
-                start: selectionStart,
-                end: selectionEnd,
-            };
+        // Obter posição atual do cursor
+        const position = textareaRef.current.selectionStart;
+        const selection = {
+            start: textareaRef.current.selectionStart,
+            end: textareaRef.current.selectionEnd
+        };
 
-            // Verificar se houve uma mudança real na posição do cursor ou na seleção
-            const positionChanged = position !== lastCursorPosition;
-            const hasSelection = selectionStart !== selectionEnd;
+        // Armazenar localmente para preservação
+        selectionStateRef.current = selection;
 
-            // Apenas enviar se a posição ou a seleção realmente mudaram
-            if (positionChanged || hasSelection) {
-                setLastCursorPosition(position);
+        // Verificar se a posição mudou realmente
+        if (position !== lastCursorPosition || selection.start !== selection.end) {
+            setLastCursorPosition(position);
 
-                // Garantir que a posição é um número válido
-                if (typeof position === 'number' && !isNaN(position) && isFinite(position)) {
-                    socketService.sendCursorPosition(document.id, position, selection);
-                } else {
-                    console.error('Posição do cursor inválida:', position);
-                }
+            // Enviar apenas se for uma posição válida
+            if (typeof position === 'number' && !isNaN(position) && isFinite(position)) {
+                socketService.sendCursorPosition(document.id, position, selection);
             }
         }
-    }, [document, textareaRef, currentUserId, lastCursorPosition]);
+    }, [document, isOwner, lastCursorPosition]);    // Função para lidar com movimento do cursor - melhorada para mais frequência
+    const handleCursorMove = useCallback(() => {
+        if (!textareaRef.current || !document) return;
+
+        // Atualiza imediatamente a posição do cursor
+        updateCursorPosition();
+        pendingCursorUpdate.current = false;
+
+        // Programa um segundo update para garantir que o cursor seja registrado
+        // mesmo após render ou mudanças do React
+        setTimeout(() => {
+            if (textareaRef.current) {
+                updateCursorPosition();
+            }
+        }, 50);
+    }, [document, updateCursorPosition]);
 
     useEffect(() => {
         if (document) {
@@ -78,6 +98,21 @@ const DocumentEditor = ({ document: initialDocument, onBack }) => {
                     handleCursorMove();
                 }
             }, 1000);
+
+            // Manter o cursor atualizado a cada 3 segundos para evitar que desapareça
+            // Isso é crítico para manter os cursores visíveis mesmo quando não há atividade
+            const cursorRefreshInterval = setInterval(() => {
+                if (textareaRef.current && document) {
+                    updateCursorPosition();
+                }
+            }, 3000);
+
+            return () => {
+                if (document) {
+                    socketService.leaveDocument(document.id);
+                }
+                clearInterval(cursorRefreshInterval);
+            };
         }
 
         return () => {
@@ -85,10 +120,45 @@ const DocumentEditor = ({ document: initialDocument, onBack }) => {
                 socketService.leaveDocument(document.id);
             }
         };
-    }, [document, handleCursorMove]); 
-    // Só executa quando o ID do documento muda
+    }, [document, handleCursorMove, updateCursorPosition]);    // Só executa quando o ID do documento muda
     // Changes are automatically saved via WebSocket in real-time
     // No need for manual auto-save intervals
+
+    // Sincronizar overlay com o scroll do textarea
+    useEffect(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        // Handle textarea scroll to update the cursor overlay
+        const handleScroll = () => {
+            // Force overlay update when scrolling
+            if (pendingCursorUpdate.current === false) {
+                pendingCursorUpdate.current = true;
+                requestAnimationFrame(() => {
+                    updateCursorPosition();
+                    pendingCursorUpdate.current = false;
+                });
+            }
+        };
+
+        textarea.addEventListener('scroll', handleScroll);
+
+        return () => {
+            textarea.removeEventListener('scroll', handleScroll);
+        };
+    }, [updateCursorPosition]);
+
+    // Limpar cursores obsoletos periodicamente
+    useEffect(() => {
+        if (!document) return;
+
+        // Limpar cursores que não foram atualizados há mais de 30 segundos
+        const cleanupInterval = setInterval(() => {
+            dispatch({ type: 'collaboration/cleanupStaleCursors' });
+        }, 10000); // A cada 10 segundos
+
+        return () => clearInterval(cleanupInterval);
+    }, [dispatch, document]);
 
     useEffect(() => {
         if (connectedUsers && connectedUsers.length > 0) {
@@ -96,22 +166,57 @@ const DocumentEditor = ({ document: initialDocument, onBack }) => {
             console.log('Count:', connectedUsers.length);
             console.log('Filtered Count:', connectedUsers.filter(user => user && (user.username || user.id)).length);
         }
-    }, [connectedUsers]); 
-    
+    }, [connectedUsers]);// Função para enviar alterações ao servidor instantaneamente
+    const sendContentToServer = (docId, text, position) => {
+        const timestamp = Date.now();
+        socketService.sendTextChange(docId, text, {
+            type: 'content-change',
+            position,
+            timestamp
+        });
+
+        // Mantemos um curto timeout para garantir que o estado isLocalEdit seja atualizado
+        // após o processamento da alteração atual
+        setTimeout(() => {
+            isLocalEditRef.current = false;
+        }, 50);
+    };    // Gerenciador de mudanças de texto - otimizado para atualizações instantâneas
     const handleContentChange = (e) => {
+        if (!document?.id) return;
+
         const newContent = e.target.value;
         const cursorPosition = e.target.selectionStart;
 
-        dispatch(updateContent(newContent));
-        setLastCursorPosition(cursorPosition);
+        // Registrar os detalhes da seleção atual
+        const currentCursorPos = {
+            start: cursorPosition,
+            end: e.target.selectionEnd
+        };
 
-        if (document && document.id) {
-            socketService.sendTextChange(document.id, newContent, {
-                type: 'content-change',
-                position: cursorPosition,
-                timestamp: Date.now(),
-            });
-        }
+        // Salvamos a posição do cursor
+        selectionStateRef.current = currentCursorPos;
+
+        // Marcar que estamos em edição local e salvar timestamp e conteúdo atual
+        isLocalEditRef.current = true;
+        localEditTimestampRef.current = Date.now();
+        lastContentRef.current = newContent;
+
+        // Atualizar o estado Redux imediatamente
+        dispatch(updateContent(newContent));
+
+        // Enviar alterações para o servidor instantaneamente
+        sendContentToServer(document.id, newContent, cursorPosition);
+        // Garantir que o cursor permaneça na posição correta
+        // É importante fazer isso após a atualização
+        requestAnimationFrame(() => {
+            if (textareaRef.current) {
+                textareaRef.current.setSelectionRange(currentCursorPos.start, currentCursorPos.end);
+
+                // Enviar atualização de cursor após mudança de conteúdo
+                // Isso é crucial para manter os cursores visíveis após mudanças
+                updateCursorPosition();
+            }
+        });
     };
 
     const handleTitleChange = (e) => {
@@ -121,17 +226,10 @@ const DocumentEditor = ({ document: initialDocument, onBack }) => {
         if (document) {
             socketService.sendTitleChange(document.id, newTitle);
         }
-    };
-
-    // Real-time sync status
+    };    // Real-time sync status
     const getSyncStatus = () => {
         if (!isConnected) return { text: 'Desconectado', color: '#ff4444' };
         return { text: 'Sincronizado', color: '#00aa00' };
-    };
-
-    const handleKeyDown = (e) => {
-        // Handle any future keyboard shortcuts here
-        // Changes are saved automatically via WebSocket
     };
 
     // Handlers para o SettingsModal
@@ -143,20 +241,15 @@ const DocumentEditor = ({ document: initialDocument, onBack }) => {
     const handleDocumentDeleted = () => {
         // Voltar para a lista de documentos
         onBack();
-    };
-
-    // Função específica para capturar movimentos do cursor
-    const handleCursorEvent = (e) => {
-        if (throttledCursorMove.current) {
-            throttledCursorMove.current();
-        }
-    }; // Throttle cursor updates to avoid spamming
-
-    const throttledCursorMove = useRef(null);
-
+    };    // Real-time sync status// Configurar handlerspara capturar movimento do cursor
     useEffect(() => {
-        // Criar função throttled para evitar muitas chamadas em curto período
-        throttledCursorMove.current = throttle(handleCursorMove, 150);
+        const throttledCursorMove = throttle(handleCursorMove, 100);
+
+        const handleCursorEvent = () => {
+            if (pendingCursorUpdate.current) return;
+            pendingCursorUpdate.current = true;
+            throttledCursorMove();
+        };
 
         // Listener para solicitações de posição de cursor
         const handleCursorPositionRequest = () => {
@@ -165,21 +258,47 @@ const DocumentEditor = ({ document: initialDocument, onBack }) => {
             }
         };
 
-        // Adicionar listener para evento personalizado
         window.addEventListener('requestCursorPosition', handleCursorPositionRequest);
 
         return () => {
             window.removeEventListener('requestCursorPosition', handleCursorPositionRequest);
         };
-    }, [document, handleCursorMove]);
-
-    // Atualizar cursor quando o conteúdo mudar (importante para manter sincronizado)
+    }, [document, handleCursorMove]);    // Gerenciamento do conteúdo do textarea otimizado para atualizações instantâneas
     useEffect(() => {
-        if (textareaRef.current && document && throttledCursorMove.current) {
-            // Pequeno atraso para garantir que o layout foi recalculado após mudança de conteúdo
-            setTimeout(throttledCursorMove.current, 100);
+        if (!textareaRef.current || !content) return;
+
+        // Se o conteúdo já está sincronizado, não fazer nada
+        if (textareaRef.current.value === content) {
+            return;
         }
-    }, [content, document]);
+
+        // Durante edição local, priorizar o conteúdo local para evitar sobrescritas
+        // Isso é crucial para evitar que o texto digitado desapareça
+        if (isLocalEditRef.current && content !== lastContentRef.current) {
+            console.log('Evitando conflito: mantendo conteúdo local durante edição ativa');
+            return;
+        }
+
+        // Salvar a posição atual do cursor e scroll
+        const currentSelectionStart = textareaRef.current.selectionStart;
+        const currentSelectionEnd = textareaRef.current.selectionEnd;
+        const scrollTop = textareaRef.current.scrollTop;
+
+        // Atualizar o textarea imediatamente
+        textareaRef.current.value = content;
+
+        // Restaurar a posição do cursor e scroll imediatamente
+        // Isso é essencial para garantir que o cursor não pule para o final
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(currentSelectionStart, currentSelectionEnd);
+        textareaRef.current.scrollTop = scrollTop;
+
+        // Registrar a posição atual para referência futura
+        selectionStateRef.current = {
+            start: currentSelectionStart,
+            end: currentSelectionEnd
+        };
+    }, [content]);
 
     function throttle(func, delay) {
         let timeoutId;
@@ -248,6 +367,113 @@ const DocumentEditor = ({ document: initialDocument, onBack }) => {
         }
     }, [cursors, currentUserId]);
 
+    // Garantir sincronização completa entre textarea e conteúdo Redux
+    useEffect(() => {
+        // Executamos isso na montagem do componente e sempre que o documento mudar
+        if (textareaRef.current && content) {
+            // Salvar a posição atual do cursor
+            const currentCursorPos = {
+                start: textareaRef.current.selectionStart,
+                end: textareaRef.current.selectionEnd
+            };
+
+            // Atualizar o textarea para garantir sincronização
+            textareaRef.current.value = content;
+
+            // Restaurar o cursor
+            textareaRef.current.focus();
+            textareaRef.current.setSelectionRange(currentCursorPos.start, currentCursorPos.end);
+        }
+    }, [document?.id]); // Executar apenas quando o documento mudar   
+
+    // Listener para eventos de texto remotos - otimizado para atualizações instantâneas
+    useEffect(() => {
+        const handleRemoteTextChange = (e) => {
+            const { content: remoteContent, timestamp } = e.detail;
+
+            // Ignorar atualizações durante edição local para evitar conflitos
+            if (isLocalEditRef.current) {
+                console.log('Ignorando atualização remota durante edição local');
+                return;
+            }
+
+            // Ignorar atualizações antigas
+            if (timestamp && timestamp < localEditTimestampRef.current) {
+                console.log('Ignorando atualização remota mais antiga:', timestamp, 'vs local:', localEditTimestampRef.current);
+                return;
+            }
+
+            // Preservar a posição do cursor
+            const currentCursorPos = {
+                start: textareaRef.current ? textareaRef.current.selectionStart : 0,
+                end: textareaRef.current ? textareaRef.current.selectionEnd : 0
+            };
+
+            selectionStateRef.current = currentCursorPos;
+
+            // Aplicar a atualização remota imediatamente
+            dispatch(updateContent(remoteContent));
+
+            // Usar requestAnimationFrame para garantir que a restauração do cursor
+            // aconteça no próximo ciclo de renderização, após o DOM ser atualizado            requestAnimationFrame(() => {
+            if (textareaRef.current) {
+                textareaRef.current.focus();
+                textareaRef.current.setSelectionRange(currentCursorPos.start, currentCursorPos.end);
+
+                // Após mudança de texto remoto, atualizar posição do cursor para 
+                // garantir que o overlay permaneça sincronizado
+                updateCursorPosition();
+
+                // Atualizar novamente após um momento para garantir estabilidade
+                setTimeout(() => {
+                    if (textareaRef.current) {
+                        updateCursorPosition();
+                    }
+                }, 200);
+            }
+        };
+
+        window.addEventListener('remoteTextChange', handleRemoteTextChange);
+
+        return () => {
+            window.removeEventListener('remoteTextChange', handleRemoteTextChange);
+        };
+    }, [dispatch, updateCursorPosition]);
+
+    // Melhorar a estabilidade do cursor após mudanças de conteúdo remotas
+    useEffect(() => {
+        const handleRemoteChange = (event) => {
+            const { detail } = event;
+
+            // Verificar se a mudança é remota e se o textarea existe
+            if (detail && detail.content && textareaRef.current) {
+                // Força a atualização do cursor local após uma pequena espera
+                // para garantir que o React terminou de renderizar o novo conteúdo
+                setTimeout(() => {
+                    if (textareaRef.current) {
+                        // Restaurar posição do cursor que foi salva antes da mudança
+                        try {
+                            textareaRef.current.setSelectionRange(
+                                selectionStateRef.current.start,
+                                selectionStateRef.current.end
+                            );
+
+                            // Forçar envio da posição atualizada
+                            updateCursorPosition();
+                        } catch (e) {
+                            // Silenciosamente ignorar, o textarea pode não estar pronto ainda
+                        }
+                    }
+                }, 50);
+            }
+        };
+
+        window.addEventListener('remoteTextChange', handleRemoteChange);
+        return () => {
+            window.removeEventListener('remoteTextChange', handleRemoteChange);
+        };
+    }, [updateCursorPosition]);
+
     if (!document) {
         return (
             <div className="editor-container">
@@ -275,27 +501,29 @@ const DocumentEditor = ({ document: initialDocument, onBack }) => {
                             value={title}
                             onChange={handleTitleChange}
                             placeholder="Título do documento"
-                            onKeyDown={handleKeyDown}
+
                         />
                     </div>
                 </div>
 
                 <div className={`editor-center ${!isOwner ? 'center-when-no-share' : ''}`}>
                     <div className="collaboration-info">
-                        <FiUsers size={16} />
-                        <div
+                        <FiUsers size={16} />                        <div
                             className="users-count"
-                            data-tooltip={connectedUsers && connectedUsers.length > 0
-                                ? `Usuários online: ${connectedUsers.filter(user => user && (user.username || user.id)).map(user => user.username || user.id).join(', ')}`
+                            data-tooltip={validConnectedUsers.length > 0
+                                ? `Usuários online: ${validConnectedUsers
+                                    .filter(user => user.username || user.id || user.userId)
+                                    .map(user => user.username || user.id || user.userId)
+                                    .join(', ')}`
                                 : 'Nenhum usuário online'
                             }
                         >
                             <span className="users-number">
-                                {connectedUsers ? connectedUsers.filter(user => user && (user.username || user.id)).length : 0}
+                                {validConnectedUsers.length}
                             </span>
                         </div>
                     </div>
-                </div>                  
+                </div>
                 <div className="editor-actions">
                     {isOwner && (
                         <>
@@ -352,25 +580,53 @@ const DocumentEditor = ({ document: initialDocument, onBack }) => {
                 </span>
             </div>
             <div className="editor-content">
-                <div className="textarea-container">
-                    <textarea
-                        ref={textareaRef}
-                        className="document-textarea"
-                        value={content}
-                        onChange={handleContentChange}
-                        onKeyDown={handleKeyDown}
-                        onMouseUp={handleCursorEvent}
-                        onKeyUp={handleCursorEvent}
-                        onSelect={handleCursorEvent}
-                        onClick={handleCursorEvent}
-                        onFocus={handleCursorEvent}
-                        onInput={handleCursorEvent}
-                        placeholder="Comece a escrever seu documento..."
-                        spellCheck="true"
-                    />
+                <div className="textarea-container">                        <textarea
+                    ref={textareaRef}
+                    className="document-textarea"
+                    // Usamos defaultValue para evitar problemas com componente controlado
+                    defaultValue={content}
+                    onChange={handleContentChange} onMouseUp={handleCursorMove}
+                    onKeyUp={handleCursorMove}
+                    onSelect={handleCursorMove}
+                    onClick={handleCursorMove}
+                    onFocus={handleCursorMove}
+                    onScroll={(e) => {
+                        // Quando o usuário rola, precisamos recalcular todas as posições de cursor
+                        if (!pendingCursorUpdate.current) {
+                            pendingCursorUpdate.current = true;
+                            // Atualizar após o scroll terminar
+                            requestAnimationFrame(handleCursorMove);
+                        }
+                    }}
+                    onInput={(e) => {
+                        // Evento adicional para garantir que qualquer input é capturado
+                        // e que o cursor permanece na posição correta
+                        if (selectionStateRef.current) {
+                            setTimeout(() => {
+                                if (textareaRef.current) {
+                                    textareaRef.current.setSelectionRange(
+                                        selectionStateRef.current.start,
+                                        selectionStateRef.current.end
+                                    );
+                                }
+                            }, 0);
+                        }
+                    }}
+                    placeholder="Comece a escrever seu documento..."
+                    spellCheck="true"
+                    autoComplete="off"
+                    autoCorrect="off"
+                />
 
                     {/* Overlay de cursores colaborativos */}
-                    <CursorOverlay cursors={cursors} textareaRef={textareaRef} />
+                    {/* Mostrar overlay apenas se temos um textarea e cursores */}
+                    {textareaRef.current && cursors && Object.keys(cursors).length > 0 && (
+                        <CursorOverlay
+                            cursors={cursors}
+                            textareaRef={textareaRef}
+                            key={`overlay-${document?.id}`}
+                        />
+                    )}
                 </div>
             </div>            {/* Modal de compartilhamento */}
             <ShareModal
